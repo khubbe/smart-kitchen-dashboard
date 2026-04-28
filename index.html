@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Smart Kitchen Safety Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg:#f0f4f8;--nav:#1a2236;--nav2:#232e47;
+  --card:#ffffff;--border:#e2e8f0;--text:#1e2d3d;
+  --sub:#64748b;--muted:#94a3b8;
+  --blue:#2563eb;--violet:#7c3aed;--amber:#d97706;
+  --green:#059669;--red:#dc2626;
+  --radius:12px;--shadow:0 1px 4px rgba(0,0,0,0.07);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh}
+
+/* DANGER OVERLAY — full screen red fade blink */
+#dangerOverlay{
+  position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background:rgba(220,38,38,0);transition:background 0.6s ease;
+}
+#dangerOverlay.active{animation:bgDangerBlink 1.4s ease-in-out infinite;}
+@keyframes bgDangerBlink{
+  0%,100%{background:rgba(220,38,38,0)}
+  50%{background:rgba(220,38,38,0.13)}
+}
+
+/* NAV */
+.nav{background:var(--nav);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,0.18)}
+.nav-left{display:flex;align-items:center;gap:14px}
+.nav-logo{width:38px;height:38px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.nav-logo svg{width:20px;height:20px;fill:white}
+.nav-title{color:#f8fafc;font-size:15px;font-weight:600}
+.nav-sub{color:#64748b;font-size:11px;font-family:'DM Mono',monospace;margin-top:1px}
+.nav-right{display:flex;align-items:center;gap:14px}
+.nav-time{color:#cbd5e1;font-size:12px;font-family:'DM Mono',monospace;background:var(--nav2);padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.07)}
+.nav-status{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:600;transition:all 0.6s ease;min-width:90px;justify-content:center}
+.nav-status.online{background:rgba(5,150,105,0.15);border:1px solid rgba(5,150,105,0.3);color:#34d399}
+.nav-status.offline{background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.25);color:#f87171}
+.nav-status.connecting{background:rgba(217,119,6,0.12);border:1px solid rgba(217,119,6,0.25);color:#fbbf24}
+.status-dot{width:8px;height:8px;border-radius:50%;transition:all 0.6s ease;flex-shrink:0}
+.status-dot.online{background:#34d399;animation:dotPulse 2s infinite}
+.status-dot.offline{background:#f87171}
+.status-dot.connecting{background:#fbbf24;animation:dotBlink 0.8s infinite}
+@keyframes dotPulse{0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,0.4)}60%{box-shadow:0 0 0 5px rgba(52,211,153,0)}}
+@keyframes dotBlink{0%,100%{opacity:1}50%{opacity:0.3}}
+.nav-notif{position:relative;cursor:pointer;width:36px;height:36px;background:var(--nav2);border-radius:9px;border:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;transition:background 0.2s}
+.nav-notif:hover{background:#2d3a52}
+.nav-notif svg{width:18px;height:18px;fill:#94a3b8}
+.notif-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:#dc2626;color:white;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--nav);padding:0 3px;transition:all 0.3s}
+.notif-badge.hidden{display:none}
+
+/* BODY */
+.body{padding:20px 24px;max-width:1400px;margin:0 auto}
+
+/* BANNER */
+.status-banner{border-radius:var(--radius);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;transition:all 0.5s ease;border:1px solid transparent}
+.status-banner.safe{background:rgba(5,150,105,0.07);border-color:rgba(5,150,105,0.2)}
+.status-banner.warning{background:rgba(217,119,6,0.07);border-color:rgba(217,119,6,0.2)}
+.status-banner.danger{background:rgba(220,38,38,0.09);border-color:rgba(220,38,38,0.3);animation:dangerFlash 1.2s infinite}
+.status-banner.offline{background:rgba(100,116,139,0.07);border-color:rgba(100,116,139,0.2)}
+@keyframes dangerFlash{0%,100%{background:rgba(220,38,38,0.09)}50%{background:rgba(220,38,38,0.17)}}
+.banner-left{display:flex;align-items:center;gap:12px}
+.banner-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.banner-icon.safe{background:rgba(5,150,105,0.15)} .banner-icon.warning{background:rgba(217,119,6,0.15)} .banner-icon.danger{background:rgba(220,38,38,0.15)} .banner-icon.offline{background:rgba(100,116,139,0.15)}
+.banner-icon svg{width:20px;height:20px}
+.banner-title{font-size:14px;font-weight:600}
+.banner-title.safe{color:#059669} .banner-title.warning{color:#d97706} .banner-title.danger{color:#dc2626} .banner-title.offline{color:#64748b}
+.banner-sub{font-size:11px;color:var(--sub);margin-top:1px;font-family:'DM Mono',monospace}
+.banner-time{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;text-align:right}
+
+/* METERS */
+.meters-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.meter-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center;box-shadow:var(--shadow);transition:transform 0.2s,box-shadow 0.2s;position:relative;overflow:hidden}
+.meter-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.1)}
+.meter-accent{position:absolute;top:0;left:0;right:0;height:3px;border-radius:12px 12px 0 0}
+.meter-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto 6px}
+.meter-icon svg{width:18px;height:18px}
+.meter-label{font-size:12px;font-weight:600;color:var(--text)}
+.meter-sub{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:10px}
+.meter-canvas-wrap{position:relative;width:88px;height:88px;margin:0 auto 8px}
+.meter-val{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;transition:color 0.4s}
+.meter-unit{font-size:11px;color:var(--muted);display:block;margin-top:1px}
+.meter-pill{display:inline-block;margin-top:8px;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:600;transition:all 0.4s ease}
+.pill-safe{background:#f0fdf4;color:#16a34a}
+.pill-warning{background:#fefce8;color:#ca8a04}
+.pill-danger{background:#fef2f2;color:#dc2626;animation:pillBlink 0.7s infinite}
+@keyframes pillBlink{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* CHARTS ROW */
+.charts-row{display:grid;grid-template-columns:1fr 1fr 320px;gap:14px;margin-bottom:18px}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+.chart-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.chart-title{font-size:13px;font-weight:600;color:var(--text)}
+.chart-badge{font-size:10px;font-family:'DM Mono',monospace;color:var(--sub);background:#f1f5f9;padding:3px 9px;border-radius:6px}
+.zone-legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
+.zone-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--sub)}
+.zone-dot{width:10px;height:4px;border-radius:2px}
+
+/* ALERT LOG */
+.alert-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);display:flex;flex-direction:column}
+.alert-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.alert-title{font-size:13px;font-weight:600;color:var(--text)}
+.alert-clear{font-size:11px;color:var(--blue);cursor:pointer;font-weight:500}
+.alert-list{flex:1;overflow-y:auto;max-height:230px;display:flex;flex-direction:column;gap:6px}
+.alert-list::-webkit-scrollbar{width:3px}
+.alert-list::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:2px}
+.alert-item{display:flex;align-items:flex-start;gap:9px;padding:9px;border-radius:8px;border:1px solid transparent;animation:slideIn 0.3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:translateX(0)}}
+.alert-item.danger{background:#fef2f2;border-color:#fecaca}
+.alert-item.warning{background:#fefce8;border-color:#fde68a}
+.alert-item.info{background:#eff6ff;border-color:#bfdbfe}
+.alert-item.safe{background:#f0fdf4;border-color:#bbf7d0}
+.alert-icon{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.alert-icon.danger{background:#fee2e2} .alert-icon.warning{background:#fef3c7} .alert-icon.info{background:#dbeafe} .alert-icon.safe{background:#dcfce7}
+.alert-icon svg{width:13px;height:13px}
+.alert-body{flex:1;min-width:0}
+.alert-msg{font-size:11px;font-weight:600;color:var(--text);line-height:1.4}
+.alert-time{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px}
+.alert-empty{text-align:center;padding:20px;color:var(--muted);font-size:12px}
+
+/* HISTORY */
+.history-row{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);margin-bottom:18px}
+.history-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.history-title{font-size:13px;font-weight:600;color:var(--text)}
+.history-right{display:flex;align-items:center;gap:8px}
+.history-badge{font-size:11px;color:var(--sub);background:#f1f5f9;padding:4px 10px;border-radius:6px;font-family:'DM Mono',monospace}
+.ai-badge{font-size:11px;font-weight:600;background:linear-gradient(135deg,rgba(37,99,235,0.1),rgba(124,58,237,0.1));color:#6366f1;border:1px solid rgba(99,102,241,0.2);padding:4px 10px;border-radius:6px;display:flex;align-items:center;gap:5px}
+.ai-badge svg{width:12px;height:12px;fill:#6366f1}
+
+/* AI INSIGHT */
+.ai-insight{margin-top:14px;background:linear-gradient(135deg,rgba(37,99,235,0.04),rgba(124,58,237,0.04));border:1px solid rgba(99,102,241,0.15);border-radius:9px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px}
+.ai-insight-icon{width:30px;height:30px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ai-insight-icon svg{width:16px;height:16px;fill:white}
+.ai-insight-text{font-size:12px;color:var(--sub);line-height:1.7}
+.ai-insight-text strong{color:var(--text)}
+
+/* NOTIF PANEL */
+.notif-panel{position:fixed;top:68px;right:24px;width:300px;background:white;border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,0.12);z-index:200;transform:translateY(-8px) scale(0.97);opacity:0;pointer-events:none;transition:all 0.22s cubic-bezier(0.16,1,0.3,1)}
+.notif-panel.open{transform:translateY(0) scale(1);opacity:1;pointer-events:all}
+.notif-panel-head{padding:13px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.notif-panel-title{font-size:13px;font-weight:600}
+.notif-clear{font-size:11px;color:var(--blue);cursor:pointer}
+.notif-list{max-height:300px;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:5px}
+.notif-empty{padding:20px;text-align:center;font-size:12px;color:var(--muted)}
+
+.footer{text-align:center;padding:16px;color:var(--muted);font-size:11px;font-family:'DM Mono',monospace;border-top:1px solid var(--border);margin-top:4px}
+</style>
+</head>
+<body>
+
+<!-- DANGER OVERLAY — full screen red blink -->
+<div id="dangerOverlay"></div>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-left">
+    <div class="nav-logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 015 5c0 2.5-1.5 4.5-3.5 5.5V17h-3v-4.5C8.5 11.5 7 9.5 7 7a5 5 0 015-5zm-1.5 17h3v1.5a1.5 1.5 0 01-3 0V19z"/></svg>
+    </div>
+    <div>
+      <div class="nav-title">Smart Kitchen Safety Monitor</div>
+      <div class="nav-sub">ESP32 · Firebase · FYP-2 · IIU Islamabad</div>
+    </div>
+  </div>
+  <div class="nav-right">
+    <div class="nav-time" id="navTime">--:-- --</div>
+    <div class="nav-status offline" id="liveStatus">
+      <div class="status-dot offline" id="statusDot"></div>
+      <span id="statusTxt">Offline</span>
+    </div>
+    <div class="nav-notif" id="notifBtn" onclick="toggleNotif()">
+      <svg viewBox="0 0 24 24"><path d="M12 22a2 2 0 002-2h-4a2 2 0 002 2zm6-6V11a6 6 0 00-5-5.92V4a1 1 0 00-2 0v1.08A6 6 0 006 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+      <div class="notif-badge hidden" id="notifBadge">0</div>
+    </div>
+  </div>
+</nav>
+
+<!-- NOTIF PANEL -->
+<div class="notif-panel" id="notifPanel">
+  <div class="notif-panel-head">
+    <div class="notif-panel-title">Notifications</div>
+    <div class="notif-clear" onclick="clearNotifs()">Clear all</div>
+  </div>
+  <div class="notif-list" id="notifList"><div class="notif-empty">No notifications</div></div>
+</div>
+
+<!-- MAIN -->
+<div class="body">
+
+  <!-- BANNER -->
+  <div class="status-banner offline" id="statusBanner">
+    <div class="banner-left">
+      <div class="banner-icon offline" id="bannerIcon">
+        <svg viewBox="0 0 24 24" fill="#64748b"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      </div>
+      <div>
+        <div class="banner-title offline" id="bannerTitle">Connecting to Firebase...</div>
+        <div class="banner-sub" id="bannerSub">Waiting for ESP32 sensor data</div>
+      </div>
+    </div>
+    <div class="banner-time" id="bannerTime">Last update: --</div>
+  </div>
+
+  <!-- METERS -->
+  <div class="meters-grid">
+    <div class="meter-card">
+      <div class="meter-accent" style="background:#2563eb"></div>
+      <div class="meter-icon" style="background:rgba(37,99,235,0.1)"><svg viewBox="0 0 24 24" fill="#2563eb"><path d="M12 2C9 2 6 5 6 8c0 4 4 8 6 13 2-5 6-9 6-13 0-3-3-6-6-6zm0 8a2 2 0 110-4 2 2 0 010 4z"/></svg></div>
+      <div class="meter-label">MQ2 Gas</div>
+      <div class="meter-sub">Combustible gas</div>
+      <div class="meter-canvas-wrap"><canvas id="mq2Meter" width="88" height="88"></canvas></div>
+      <div class="meter-val" id="mq2Val" style="color:#2563eb">--</div>
+      <span class="meter-unit">ppm</span>
+      <div><span class="meter-pill pill-safe" id="mq2Pill">--</span></div>
+    </div>
+    <div class="meter-card">
+      <div class="meter-accent" style="background:#7c3aed"></div>
+      <div class="meter-icon" style="background:rgba(124,58,237,0.1)"><svg viewBox="0 0 24 24" fill="#7c3aed"><path d="M12 2a7 7 0 00-7 7c0 2.5 1.3 4.7 3.3 6l.7.5V17h6v-1.5l.7-.5A7 7 0 0012 2zm-1 15h2v1h-2zm0 2h2v1h-2z"/></svg></div>
+      <div class="meter-label">MQ135 Air</div>
+      <div class="meter-sub">Air quality</div>
+      <div class="meter-canvas-wrap"><canvas id="mq135Meter" width="88" height="88"></canvas></div>
+      <div class="meter-val" id="mq135Val" style="color:#7c3aed">--</div>
+      <span class="meter-unit">ppm</span>
+      <div><span class="meter-pill pill-safe" id="mq135Pill">--</span></div>
+    </div>
+    <div class="meter-card">
+      <div class="meter-accent" style="background:#d97706"></div>
+      <div class="meter-icon" style="background:rgba(217,119,6,0.1)"><svg viewBox="0 0 24 24" fill="#d97706"><path d="M15 13V5a3 3 0 00-6 0v8a5 5 0 106 0zm-3 7a3 3 0 110-6 3 3 0 010 6z"/></svg></div>
+      <div class="meter-label">Temperature</div>
+      <div class="meter-sub">DHT11 sensor</div>
+      <div class="meter-canvas-wrap"><canvas id="tempMeter" width="88" height="88"></canvas></div>
+      <div class="meter-val" id="tempVal" style="color:#d97706">--</div>
+      <span class="meter-unit">°C</span>
+      <div><span class="meter-pill pill-safe" id="tempPill">--</span></div>
+    </div>
+    <div class="meter-card">
+      <div class="meter-accent" style="background:#059669"></div>
+      <div class="meter-icon" style="background:rgba(5,150,105,0.1)"><svg viewBox="0 0 24 24" fill="#059669"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg></div>
+      <div class="meter-label">Humidity</div>
+      <div class="meter-sub">DHT11 sensor</div>
+      <div class="meter-canvas-wrap"><canvas id="humMeter" width="88" height="88"></canvas></div>
+      <div class="meter-val" id="humVal" style="color:#059669">--</div>
+      <span class="meter-unit">%</span>
+      <div><span class="meter-pill pill-safe" id="humPill">--</span></div>
+    </div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-head">
+        <div class="chart-title">Gas Levels — Live (Last 20)</div>
+        <div class="chart-badge">ppm</div>
+      </div>
+      <canvas id="gasChart" height="155"></canvas>
+      <div class="zone-legend">
+        <div class="zone-item"><div class="zone-dot" style="background:#059669"></div>Safe &lt;800</div>
+        <div class="zone-item"><div class="zone-dot" style="background:#d97706"></div>Warning &lt;1500</div>
+        <div class="zone-item"><div class="zone-dot" style="background:#dc2626"></div>Danger ≥1500</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head">
+        <div class="chart-title">Temperature & Humidity</div>
+        <div class="chart-badge">°C / %</div>
+      </div>
+      <canvas id="tempChart" height="155"></canvas>
+      <div class="zone-legend">
+        <div class="zone-item"><div class="zone-dot" style="background:#d97706"></div>Temp (°C)</div>
+        <div class="zone-item"><div class="zone-dot" style="background:#059669"></div>Humidity (%)</div>
+        <div class="zone-item"><div class="zone-dot" style="background:#dc2626;opacity:0.5"></div>Danger line</div>
+      </div>
+    </div>
+    <div class="alert-card">
+      <div class="alert-head">
+        <div class="alert-title">Alert Log</div>
+        <div class="alert-clear" onclick="clearAlerts()">Clear</div>
+      </div>
+      <div class="alert-list" id="alertList">
+        <div class="alert-empty">System safe — no alerts ✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="history-row">
+    <div class="history-head">
+      <div class="history-title">Historical Data — MQ2 & MQ135 (Last 20 saved records)</div>
+      <div class="history-right">
+        <div class="history-badge" id="historyLabel">Loading...</div>
+        <div class="ai-badge"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm1 14.93V15h-2v1.93A8 8 0 014 12h2v-2H4a8 8 0 018-8v2h2V2a8 8 0 018 8h-2v2h2a8 8 0 01-7 7.93z"/></svg>AI Ready</div>
+      </div>
+    </div>
+    <canvas id="historyChart" height="90"></canvas>
+    <div class="ai-insight">
+      <div class="ai-insight-icon"><svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg></div>
+      <div class="ai-insight-text" id="aiText"><strong>AI Analysis:</strong> Waiting for live sensor data to generate insights. AI anomaly detection and trend prediction will be available after Python ML phase integration.</div>
+    </div>
+  </div>
+
+  <!-- AI ANALYSIS SECTION -->
+  <div class="history-row" style="margin-bottom:18px">
+    <div class="history-head">
+      <div class="history-title">AI Analysis Results — Python ML (Auto every 5 min)</div>
+      <div class="history-right">
+        <div class="history-badge" id="aiRunLabel">Server not running</div>
+        <div class="ai-badge"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm1 14.93V15h-2v1.93A8 8 0 014 12h2v-2H4a8 8 0 018-8v2h2V2a8 8 0 018 8h-2v2h2a8 8 0 01-7 7.93z"/></svg>IsolationForest</div>
+      </div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:14px;text-align:center">
+        <div style="font-size:11px;color:var(--sub);font-family:'DM Mono',monospace">Total Records</div>
+        <div id="aiTotalRec" style="font-size:22px;font-weight:700;color:var(--blue);font-family:'DM Mono',monospace;margin:4px 0">--</div>
+      </div>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:14px;text-align:center">
+        <div style="font-size:11px;color:var(--sub);font-family:'DM Mono',monospace">Anomalies</div>
+        <div id="aiAnomCount" style="font-size:22px;font-weight:700;color:#dc2626;font-family:'DM Mono',monospace;margin:4px 0">--</div>
+      </div>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:14px;text-align:center">
+        <div style="font-size:11px;color:var(--sub);font-family:'DM Mono',monospace">Alert Rate</div>
+        <div id="aiAlertRate" style="font-size:22px;font-weight:700;color:#d97706;font-family:'DM Mono',monospace;margin:4px 0">--%</div>
+      </div>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:14px;text-align:center">
+        <div style="font-size:11px;color:var(--sub);font-family:'DM Mono',monospace">Peak Risk Hour</div>
+        <div id="aiPeakHour" style="font-size:22px;font-weight:700;color:#7c3aed;font-family:'DM Mono',monospace;margin:4px 0">--:00</div>
+      </div>
+    </div>
+
+    <!-- Hourly Risk Chart -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:8px">24h Hourly Risk Pattern</div>
+      <canvas id="aiRiskChart" height="70"></canvas>
+    </div>
+
+    <!-- Anomaly Table -->
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:8px">Recent Anomalies</div>
+      <div id="aiAnomTable">
+        <div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">
+          Run <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">uvicorn server:app --host 0.0.0.0 --port 8000</code> — AI results auto-populate here
+        </div>
+      </div>
+    </div>
+
+    <!-- AI ML Insight -->
+    <div class="ai-insight" id="aiSummaryBox" style="margin-top:14px;display:none">
+      <div class="ai-insight-icon"><svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg></div>
+      <div class="ai-insight-text" id="aiSummaryText"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">Smart Kitchen Safety Monitor · FYP · AbdulBaqi & Khubaib Shah · IIU Islamabad 2026</div>
+
+<script>
+// ── FIREBASE ─────────────────────────────────
+firebase.initializeApp({
+  apiKey:"AIzaSyC5nQlu7U3L3AvqefP627_M4bSMGx8MzRs",
+  authDomain:"smartkitchensaftey.firebaseapp.com",
+  databaseURL:"https://smartkitchensaftey-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"smartkitchensaftey",
+  storageBucket:"smartkitchensaftey.firebasestorage.app",
+  messagingSenderId:"92852895783",
+  appId:"1:92852895783:web:6670a82f0de69021870e02"
+});
+const db=firebase.database();
+
+// ── THRESHOLDS ───────────────────────────────
+const MQ2_WARN=800,   MQ2_DANGER=1500;
+const MQ135_WARN=1000, MQ135_DANGER=2000;
+const TEMP_WARN=35,   TEMP_DANGER=50;
+const HUM_WARN=80,    HUM_DANGER=90;
+const OFFLINE_TIMEOUT=18000;
+
+// ── STATE ────────────────────────────────────
+let mq2Curr=0,mq135Curr=0,tempCurr=0,humCurr=0;
+let prevStatus='Normal';
+let notifOpen=false;
+let lastDataTime=0;
+
+// ── LOCALSTORAGE ─────────────────────────────
+const LS_ALERTS='sk_alerts';
+const LS_NOTIFS='sk_notifs';
+const MAX_STORED=50;
+
+function loadStored(key){ try{ return JSON.parse(localStorage.getItem(key)||'[]'); }catch(e){ return []; } }
+function saveStored(key,arr){ try{ localStorage.setItem(key,JSON.stringify(arr.slice(0,MAX_STORED))); }catch(e){} }
+
+let storedAlerts=loadStored(LS_ALERTS);
+let storedNotifs=loadStored(LS_NOTIFS);
+
+// ── TIME ─────────────────────────────────────
+function fmtTime(d){
+  let h=d.getHours(),m=d.getMinutes(),s=d.getSeconds();
+  const ap=h>=12?'PM':'AM';
+  h=h%12||12;
+  return `${pad(h)}:${pad(m)}:${pad(s)} ${ap}`;
+}
+function fmtTimeShort(d){
+  let h=d.getHours(),m=d.getMinutes();
+  const ap=h>=12?'PM':'AM';
+  h=h%12||12;
+  return `${pad(h)}:${pad(m)} ${ap}`;
+}
+function fmtDate(d){
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
+}
+function pad(n){return String(n).padStart(2,'0')}
+
+setInterval(()=>{
+  const now=new Date();
+  document.getElementById('navTime').textContent=fmtDate(now)+' · '+fmtTime(now);
+  if(lastDataTime>0 && Date.now()-lastDataTime>OFFLINE_TIMEOUT){
+    setConnectionState('offline');
+  }
+},1000);
+
+// ── CONNECTION STATE ─────────────────────────
+function setConnectionState(state){
+  const dot=document.getElementById('statusDot');
+  const txt=document.getElementById('statusTxt');
+  const wrap=document.getElementById('liveStatus');
+  dot.className='status-dot '+state;
+  wrap.className='nav-status '+state;
+  if(state==='online'){ txt.textContent='Live'; }
+  else if(state==='offline'){ txt.textContent='Offline'; updateBanner('offline','--'); }
+  else { txt.textContent='Wait...'; }
+}
+
+// ── DANGER OVERLAY ───────────────────────────
+function setDangerOverlay(active){
+  document.getElementById('dangerOverlay').classList.toggle('active', active);
+}
+
+// ── METERS ───────────────────────────────────
+function drawMeter(id,pct,color){
+  const c=document.getElementById(id); if(!c)return;
+  const ctx=c.getContext('2d');
+  const cx=44,cy=44,r=32,lw=9;
+  const s=Math.PI*0.75,e=Math.PI*2.25;
+  ctx.clearRect(0,0,88,88);
+  ctx.beginPath();ctx.arc(cx,cy,r,s,e);ctx.strokeStyle='#f1f5f9';ctx.lineWidth=lw;ctx.lineCap='round';ctx.stroke();
+  if(pct>0){
+    ctx.beginPath();ctx.arc(cx,cy,r,s,s+(e-s)*Math.min(pct,1));
+    ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.lineCap='round';ctx.stroke();
+  }
+  ctx.fillStyle='#64748b';ctx.font='bold 10px DM Mono,monospace';ctx.textAlign='center';
+  ctx.fillText(Math.round(pct*100)+'%',cx,cy+4);
+}
+
+const meterAnims={};
+function animMeter(id,fromP,toP,color,dur=500){
+  if(meterAnims[id]) cancelAnimationFrame(meterAnims[id]);
+  const start=performance.now();
+  function step(now){
+    const p=Math.min((now-start)/dur,1);
+    const ease=1-Math.pow(1-p,3);
+    drawMeter(id,fromP+(toP-fromP)*ease,color);
+    if(p<1) meterAnims[id]=requestAnimationFrame(step);
+  }
+  meterAnims[id]=requestAnimationFrame(step);
+}
+
+function getSt(v,w,d){return v>=d?'danger':v>=w?'warning':'safe'}
+function meterColor(st,def){return st==='danger'?'#dc2626':st==='warning'?'#d97706':def}
+function pillClass(st){return 'meter-pill pill-'+st}
+function pillTxt(st){return st==='danger'?'Danger':st==='warning'?'Warning':'Normal'}
+
+function updateMeter(meterId,valId,pillId,val,warn,danger,defColor,maxVal,oldVal){
+  const st=getSt(val,warn,danger);
+  const col=meterColor(st,defColor);
+  animMeter(meterId,Math.min(oldVal/maxVal,1),Math.min(val/maxVal,1),col);
+  const vEl=document.getElementById(valId);
+  vEl.textContent=Number.isInteger(val)?val:val.toFixed(1);
+  vEl.style.color=col;
+  const pill=document.getElementById(pillId);
+  pill.className=pillClass(st);
+  pill.textContent=pillTxt(st);
+}
+
+// ── BANNER ───────────────────────────────────
+function updateBanner(state,timeStr){
+  const b=document.getElementById('statusBanner');
+  const ic=document.getElementById('bannerIcon');
+  const ti=document.getElementById('bannerTitle');
+  const su=document.getElementById('bannerSub');
+  const bt=document.getElementById('bannerTime');
+  b.className='status-banner '+state;
+  ic.className='banner-icon '+state;
+  ti.className='banner-title '+state;
+  bt.textContent='Last update: '+timeStr;
+  const cfg={
+    safe:  {svg:'<svg viewBox="0 0 24 24" fill="#059669"><path d="M12 2L3 7v5c0 5.25 3.75 10.15 9 11.35C17.25 22.15 21 17.25 21 12V7l-9-5zm-1 13l-3-3 1.41-1.41L11 12.17l4.59-4.58L17 9l-6 6z"/></svg>',title:'All Systems Normal',sub:'All sensor readings within safe thresholds'},
+    warning:{svg:'<svg viewBox="0 0 24 24" fill="#d97706"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',title:'System Warning',sub:'One or more sensors approaching threshold limits'},
+    danger: {svg:'<svg viewBox="0 0 24 24" fill="#dc2626"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>',title:'⚠ DANGER — Alert Active!',sub:'Immediate action required — alert triggered'},
+    offline:{svg:'<svg viewBox="0 0 24 24" fill="#64748b"><path d="M19.35 10.04A7.49 7.49 0 0012 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 000 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.65 0 3 1.35 3 3s-1.35 3-3 3z"/></svg>',title:'ESP32 Offline',sub:'No data received — check device connection'}
+  };
+  const c=cfg[state]||cfg.offline;
+  ic.innerHTML=c.svg; ti.textContent=c.title; su.textContent=c.sub;
+}
+
+// ── ALERT LOG ────────────────────────────────
+function renderAlerts(){
+  const list=document.getElementById('alertList');
+  if(storedAlerts.length===0){list.innerHTML='<div class="alert-empty">System safe — no alerts ✓</div>';return;}
+  const icons={
+    danger:'<svg viewBox="0 0 24 24" fill="#dc2626"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>',
+    warning:'<svg viewBox="0 0 24 24" fill="#d97706"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',
+    info:'<svg viewBox="0 0 24 24" fill="#2563eb"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>',
+    safe:'<svg viewBox="0 0 24 24" fill="#059669"><path d="M12 2L3 7v5c0 5.25 3.75 10.15 9 11.35C17.25 22.15 21 17.25 21 12V7l-9-5zm-1 13l-3-3 1.41-1.41L11 12.17l4.59-4.58L17 9l-6 6z"/></svg>'
+  };
+  list.innerHTML=storedAlerts.map(a=>`
+    <div class="alert-item ${a.type}">
+      <div class="alert-icon ${a.type}">${icons[a.type]||icons.info}</div>
+      <div class="alert-body">
+        <div class="alert-msg">${a.msg}</div>
+        <div class="alert-time">${a.time}</div>
+      </div>
+    </div>`).join('');
+}
+
+function addAlert(msg,type,timeStr){
+  storedAlerts.unshift({msg,type,time:timeStr});
+  if(storedAlerts.length>MAX_STORED) storedAlerts.pop();
+  saveStored(LS_ALERTS,storedAlerts);
+  renderAlerts();
+  addNotif(msg,type,timeStr);
+}
+
+function clearAlerts(){
+  storedAlerts=[];
+  saveStored(LS_ALERTS,storedAlerts);
+  renderAlerts();
+}
+
+// ── NOTIFICATIONS ─────────────────────────────
+function renderNotifs(){
+  const list=document.getElementById('notifList');
+  if(storedNotifs.length===0){list.innerHTML='<div class="notif-empty">No notifications</div>';return;}
+  list.innerHTML=storedNotifs.map(n=>`
+    <div class="alert-item ${n.type}" style="margin-bottom:4px">
+      <div class="alert-body">
+        <div class="alert-msg">${n.msg}</div>
+        <div class="alert-time">${n.time}</div>
+      </div>
+    </div>`).join('');
+}
+
+function addNotif(msg,type,time){
+  storedNotifs.unshift({msg,type,time});
+  if(storedNotifs.length>MAX_STORED) storedNotifs.pop();
+  saveStored(LS_NOTIFS,storedNotifs);
+  const badge=document.getElementById('notifBadge');
+  badge.classList.remove('hidden');
+  badge.textContent=storedNotifs.length>9?'9+':storedNotifs.length;
+  renderNotifs();
+}
+
+function clearNotifs(){
+  storedNotifs=[];
+  saveStored(LS_NOTIFS,storedNotifs);
+  document.getElementById('notifBadge').classList.add('hidden');
+  renderNotifs();
+}
+
+function toggleNotif(){
+  notifOpen=!notifOpen;
+  document.getElementById('notifPanel').classList.toggle('open',notifOpen);
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#notifBtn')&&!e.target.closest('#notifPanel')){
+    notifOpen=false;document.getElementById('notifPanel').classList.remove('open');
+  }
+});
+
+if(storedNotifs.length>0){
+  const b=document.getElementById('notifBadge');
+  b.classList.remove('hidden');
+  b.textContent=storedNotifs.length>9?'9+':storedNotifs.length;
+}
+
+// ── CHARTS SETUP ─────────────────────────────
+const MAX_LIVE=20;
+
+function makeGasPlugin(){
+  return {id:'gasZones',beforeDraw(chart){
+    const {ctx,scales:{x,y}}=chart;
+    if(!x||!y)return;
+    const l=x.left,r=x.right;
+    const safe=y.getPixelForValue(MQ2_WARN);
+    const warn=y.getPixelForValue(MQ2_DANGER);
+    const top=y.top,bot=y.bottom;
+    ctx.save();
+    ctx.fillStyle='rgba(5,150,105,0.05)';ctx.fillRect(l,safe,r-l,bot-safe);
+    ctx.fillStyle='rgba(217,119,6,0.05)';ctx.fillRect(l,warn,r-l,safe-warn);
+    ctx.fillStyle='rgba(220,38,38,0.05)';ctx.fillRect(l,top,r-l,warn-top);
+    ctx.setLineDash([5,4]);ctx.lineWidth=1;
+    ctx.strokeStyle='rgba(217,119,6,0.4)';ctx.beginPath();ctx.moveTo(l,safe);ctx.lineTo(r,safe);ctx.stroke();
+    ctx.strokeStyle='rgba(220,38,38,0.4)';ctx.beginPath();ctx.moveTo(l,warn);ctx.lineTo(r,warn);ctx.stroke();
+    ctx.restore();
+  }};
+}
+
+function makeTempPlugin(){
+  return {id:'tempZones',beforeDraw(chart){
+    const {ctx,scales:{x,y}}=chart;
+    if(!x||!y)return;
+    const l=x.left,r=x.right;
+    const wLine=y.getPixelForValue(TEMP_WARN);
+    const dLine=y.getPixelForValue(TEMP_DANGER);
+    ctx.save();
+    ctx.setLineDash([5,4]);ctx.lineWidth=1;
+    ctx.strokeStyle='rgba(217,119,6,0.4)';ctx.beginPath();ctx.moveTo(l,wLine);ctx.lineTo(r,wLine);ctx.stroke();
+    ctx.strokeStyle='rgba(220,38,38,0.4)';ctx.beginPath();ctx.moveTo(l,dLine);ctx.lineTo(r,dLine);ctx.stroke();
+    ctx.restore();
+  }};
+}
+
+const commonOpts={
+  responsive:true,animation:{duration:300},
+  plugins:{legend:{labels:{font:{size:11},boxWidth:12,padding:12}}},
+  scales:{
+    x:{ticks:{font:{size:10},color:'#94a3b8',maxRotation:0},grid:{color:'#f1f5f9'}},
+    y:{ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'#f1f5f9'}}
+  }
+};
+
+const gasChart=new Chart(document.getElementById('gasChart'),{
+  type:'line',
+  data:{labels:[],datasets:[
+    {label:'MQ2 (ppm)',data:[],borderColor:'#2563eb',backgroundColor:'rgba(37,99,235,0.07)',tension:0.4,pointRadius:3,pointBackgroundColor:'#fff',pointBorderColor:'#2563eb',pointBorderWidth:2,borderWidth:2,fill:true},
+    {label:'MQ135 (ppm)',data:[],borderColor:'#7c3aed',backgroundColor:'rgba(124,58,237,0.07)',tension:0.4,pointRadius:3,pointBackgroundColor:'#fff',pointBorderColor:'#7c3aed',pointBorderWidth:2,borderWidth:2,fill:true}
+  ]},
+  options:{...commonOpts},
+  plugins:[makeGasPlugin()]
+});
+
+const tempChart=new Chart(document.getElementById('tempChart'),{
+  type:'line',
+  data:{labels:[],datasets:[
+    {label:'Temp (°C)',data:[],borderColor:'#d97706',backgroundColor:'rgba(217,119,6,0.07)',tension:0.4,pointRadius:3,pointBackgroundColor:'#fff',pointBorderColor:'#d97706',pointBorderWidth:2,borderWidth:2,fill:true},
+    {label:'Humidity (%)',data:[],borderColor:'#059669',backgroundColor:'rgba(5,150,105,0.07)',tension:0.4,pointRadius:3,pointBackgroundColor:'#fff',pointBorderColor:'#059669',pointBorderWidth:2,borderWidth:2,fill:true}
+  ]},
+  options:{...commonOpts},
+  plugins:[makeTempPlugin()]
+});
+
+const historyChart=new Chart(document.getElementById('historyChart'),{
+  type:'line',
+  data:{labels:[],datasets:[
+    {label:'MQ2 (ppm)',data:[],borderColor:'#2563eb',backgroundColor:'rgba(37,99,235,0.05)',tension:0.3,pointRadius:3,borderWidth:1.5,fill:true},
+    {label:'MQ135 (ppm)',data:[],borderColor:'#7c3aed',backgroundColor:'rgba(124,58,237,0.05)',tension:0.3,pointRadius:3,borderWidth:1.5,fill:true}
+  ]},
+  options:{
+    responsive:true,animation:{duration:400},
+    plugins:{legend:{labels:{font:{size:11},boxWidth:12}}},
+    scales:{
+      x:{ticks:{font:{size:9},color:'#94a3b8',maxRotation:40},grid:{color:'#f1f5f9'}},
+      y:{ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'#f1f5f9'}}
+    }
+  }
+});
+
+function pushLive(chart,label,vals){
+  chart.data.labels.push(label);
+  chart.data.datasets.forEach((ds,i)=>ds.data.push(vals[i]));
+  while(chart.data.labels.length>MAX_LIVE){
+    chart.data.labels.shift();
+    chart.data.datasets.forEach(ds=>ds.data.shift());
+  }
+  chart.update('active');
+}
+
+// ── AI INSIGHT (live rule-based) ──────────────
+function updateAI(mq2,mq135,temp,hum){
+  const el=document.getElementById('aiText');
+  const mq2s=getSt(mq2,MQ2_WARN,MQ2_DANGER);
+  const mq135s=getSt(mq135,MQ135_WARN,MQ135_DANGER);
+  const ts=getSt(temp,TEMP_WARN,TEMP_DANGER);
+  let msg='<strong>AI Analysis:</strong> ';
+  if(mq2s==='danger'||mq135s==='danger'){
+    msg+=`<strong style="color:#dc2626">Critical gas levels!</strong> MQ2: ${mq2} ppm (${Math.round(mq2/MQ2_DANGER*100)}% of limit), MQ135: ${mq135} ppm. Immediate ventilation required.`;
+  } else if(mq2s==='warning'||mq135s==='warning'){
+    msg+=`Elevated readings. MQ2 at <strong>${Math.round(mq2/MQ2_DANGER*100)}%</strong> of danger threshold. Monitor closely.`;
+  } else if(ts==='warning'){
+    msg+=`Temperature elevated at <strong>${temp.toFixed(1)}°C</strong>. Gas levels normal. Likely cooking activity.`;
+  } else {
+    msg+=`All readings normal. <strong>System operating safely.</strong> MQ2: ${mq2} ppm, Temp: ${temp.toFixed(1)}°C, Humidity: ${hum.toFixed(0)}%.`;
+  }
+  msg+=' <em style="color:#94a3b8;font-size:11px"> — ML results below ↓</em>';
+  el.innerHTML=msg;
+}
+
+// ── FIREBASE LIVE LISTENER ────────────────────
+db.ref('/sensorData').on('value',snap=>{
+  const d=snap.val();
+  if(!d)return;
+
+  const now=new Date();
+  const timeStr=fmtTimeShort(now);
+  lastDataTime=Date.now();
+  setConnectionState('online');
+
+  const mq2=d.mq2||0,mq135=d.mq135||0;
+  const temp=d.temperature||0,hum=d.humidity||0;
+  const statusRaw=d.status||'Normal';
+
+  const oldMq2=mq2Curr,oldMq135=mq135Curr;
+  const oldTemp=tempCurr,oldHum=humCurr;
+  mq2Curr=mq2;mq135Curr=mq135;tempCurr=temp;humCurr=hum;
+
+  updateMeter('mq2Meter','mq2Val','mq2Pill',mq2,MQ2_WARN,MQ2_DANGER,'#2563eb',MQ2_DANGER*1.3,oldMq2);
+  updateMeter('mq135Meter','mq135Val','mq135Pill',mq135,MQ135_WARN,MQ135_DANGER,'#7c3aed',MQ135_DANGER*1.3,oldMq135);
+  updateMeter('tempMeter','tempVal','tempPill',temp,TEMP_WARN,TEMP_DANGER,'#d97706',80,oldTemp);
+  updateMeter('humMeter','humVal','humPill',hum,HUM_WARN,HUM_DANGER,'#059669',100,oldHum);
+
+  const mq2s=getSt(mq2,MQ2_WARN,MQ2_DANGER);
+  const mq135s=getSt(mq135,MQ135_WARN,MQ135_DANGER);
+  const ts=getSt(temp,TEMP_WARN,TEMP_DANGER);
+  let overall='safe';
+  if(mq2s==='danger'||mq135s==='danger'||ts==='danger') overall='danger';
+  else if(mq2s==='warning'||mq135s==='warning'||ts==='warning') overall='warning';
+
+  updateBanner(overall,timeStr);
+  setDangerOverlay(overall==='danger'); // RED BLINK on danger
+
+  if(overall!=='safe' && statusRaw!==prevStatus){
+    addAlert(`${statusRaw} — MQ2:${mq2} MQ135:${mq135} T:${temp.toFixed(1)}°C`,overall,fmtTime(now));
+  }
+  if(overall==='safe' && prevStatus!=='Normal' && prevStatus!=='safe'){
+    addAlert('System returned to SAFE state ✓','safe',fmtTime(now));
+    setDangerOverlay(false);
+  }
+  prevStatus=statusRaw;
+
+  pushLive(gasChart,timeStr,[mq2,mq135]);
+  pushLive(tempChart,timeStr,[temp,hum]);
+  updateAI(mq2,mq135,temp,hum);
+});
+
+// ── HISTORY LOAD ─────────────────────────────
+function loadHistory(){
+  const now=new Date();
+  const yr=now.getFullYear();
+  const mo=pad(now.getMonth()+1);
+  const dy=pad(now.getDate());
+  const hr=pad(now.getHours());
+  db.ref(`/sensorHistory/${yr}/${mo}/${dy}/${hr}`)
+    .limitToLast(20).once('value',snap=>{
+      const d=snap.val();
+      if(!d){document.getElementById('historyLabel').textContent='No history yet';return;}
+      const sorted=Object.entries(d).sort((a,b)=>a[0]>b[0]?1:-1);
+      historyChart.data.labels=sorted.map(([k])=>k);
+      historyChart.data.datasets[0].data=sorted.map(([,v])=>v.mq2||0);
+      historyChart.data.datasets[1].data=sorted.map(([,v])=>v.mq135||0);
+      historyChart.update();
+      document.getElementById('historyLabel').textContent=`${yr}/${mo}/${dy} ${hr}:xx — ${sorted.length} records`;
+  });
+}
+loadHistory();
+setInterval(loadHistory,120000);
+
+// ── AI ANALYSIS FROM FIREBASE ─────────────────
+const aiRiskChart=new Chart(document.getElementById('aiRiskChart'),{
+  type:'bar',
+  data:{
+    labels:Array.from({length:24},(_,i)=>i+':00'),
+    datasets:[{label:'Risk Score',data:new Array(24).fill(0),backgroundColor:new Array(24).fill('#22d3ee'),borderRadius:3}]
+  },
+  options:{
+    responsive:true,
+    plugins:{legend:{display:false}},
+    scales:{
+      x:{ticks:{font:{size:9},color:'#94a3b8'},grid:{color:'#f1f5f9'}},
+      y:{ticks:{font:{size:9},color:'#94a3b8'},grid:{color:'#f1f5f9'},max:1}
+    }
+  }
+});
+
+function loadAIAnalysis(){
+  db.ref('/aiAnalysis').once('value',snap=>{
+    const d=snap.val();
+    if(!d||!d.summary) return;
+    const s=d.summary;
+    document.getElementById('aiRunLabel').textContent='Last run: '+(s.last_run||'--');
+    document.getElementById('aiTotalRec').textContent =s.total_records ||'--';
+    document.getElementById('aiAnomCount').textContent=s.anomaly_count ||'0';
+    document.getElementById('aiAlertRate').textContent=(s.alert_rate_pct||0)+'%';
+    document.getElementById('aiPeakHour').textContent =(s.top_risk_hour!==undefined?s.top_risk_hour+':00':'--');
+
+    if(d.hourlyRisk){
+      const vals=Array.from({length:24},(_,i)=>d.hourlyRisk[String(i)]||0);
+      aiRiskChart.data.datasets[0].data=vals;
+      aiRiskChart.data.datasets[0].backgroundColor=vals.map(v=>v>0.3?'#ef4444':v>0.1?'#f97316':'#22d3ee');
+      aiRiskChart.update();
+    }
+
+    if(d.anomalies&&Object.keys(d.anomalies).length>0){
+      const rows=Object.values(d.anomalies).map(a=>`
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:7px 10px;font-size:11px;font-family:'DM Mono',monospace;color:var(--sub)">${(a.timestamp||'--').slice(0,16)}</td>
+          <td style="padding:7px 10px;font-size:11px;color:#2563eb;font-weight:600">${a.mq2}</td>
+          <td style="padding:7px 10px;font-size:11px;color:#7c3aed;font-weight:600">${a.mq135}</td>
+          <td style="padding:7px 10px;font-size:11px;color:#d97706">${a.temperature}°C</td>
+          <td style="padding:7px 10px;font-size:11px"><span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600">${a.status||'Anomaly'}</span></td>
+        </tr>`).join('');
+      document.getElementById('aiAnomTable').innerHTML=`
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f8fafc">
+            <th style="padding:7px 10px;font-size:11px;text-align:left;color:var(--sub);font-weight:600">Timestamp</th>
+            <th style="padding:7px 10px;font-size:11px;text-align:left;color:var(--sub);font-weight:600">MQ2</th>
+            <th style="padding:7px 10px;font-size:11px;text-align:left;color:var(--sub);font-weight:600">MQ135</th>
+            <th style="padding:7px 10px;font-size:11px;text-align:left;color:var(--sub);font-weight:600">Temp</th>
+            <th style="padding:7px 10px;font-size:11px;text-align:left;color:var(--sub);font-weight:600">Status</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    const box=document.getElementById('aiSummaryBox');
+    const txt=document.getElementById('aiSummaryText');
+    if(box&&txt&&s.total_records){
+      box.style.display='flex';
+      txt.innerHTML=`<strong>ML Insight:</strong> Analyzed <strong>${s.total_records}</strong> records. 
+        IsolationForest flagged <strong style="color:#dc2626">${s.anomaly_count} anomalies</strong>. 
+        Alert rate: <strong>${s.alert_rate_pct}%</strong>. 
+        Peak risk hour: <strong>${s.top_risk_hour}:00</strong>. 
+        MQ2 avg <strong>${s.mq2_mean}</strong> (max ${s.mq2_max}), 
+        Temp avg <strong>${s.temp_mean}°C</strong>.`;
+    }
+  });
+}
+loadAIAnalysis();
+setInterval(loadAIAnalysis,300000);
+
+// Init UI
+renderAlerts();
+renderNotifs();
+['mq2Meter','mq135Meter','tempMeter','humMeter'].forEach((id,i)=>{
+  drawMeter(id,0,['#2563eb','#7c3aed','#d97706','#059669'][i]);
+});
+</script>
+</body>
+</html>
