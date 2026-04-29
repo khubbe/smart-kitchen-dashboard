@@ -197,11 +197,14 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
   .ai-stats-grid{grid-template-columns:1fr 1fr;gap:8px}
   .ai-stat-val{font-size:18px}
   .notif-panel{right:10px;width:calc(100vw - 20px)}
+  footer{padding:20px 12px}
+  footer > div > div{gap:20px;flex-wrap:wrap;justify-content:center}
+  footer > div > div > div[style*="width:1px"]{display:none}
 }
 @media(max-width:480px){
   .body{padding:10px}
   .nav{padding:0 12px;height:50px}
-  .nav-title{font-size:12px}
+  .nav-title{font-size:11px;max-width:180px}
   .nav-logo{width:30px;height:30px}
   .nav-logo svg{width:17px;height:17px}
   .nav-status{padding:5px 10px;min-width:60px;font-size:11px}
@@ -223,6 +226,11 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
   .ai-stat-label{font-size:10px}
   .ai-insight{flex-direction:column;gap:8px}
   .footer{font-size:10px;padding:12px}
+  .nav-sub{font-size:9px}
+  footer{padding:16px 10px}
+  footer > div > div{flex-direction:column;align-items:center;gap:16px}
+  footer > div > div > div[style*="width:1px"]{display:none}
+  footer > div > div > div > div{gap:8px}
 }
 </style>
 </head>
