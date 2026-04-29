@@ -4,6 +4,12 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Smart Kitchen Safety Monitor</title>
+<!-- PWA Support -->
+<link rel="manifest" href="manifest.json"/>
+<meta name="theme-color" content="#1a2236"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Smart Kitchen"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -33,13 +39,13 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
 
 /* NAV */
 .nav{background:var(--nav);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,0.18)}
-.nav-left{display:flex;align-items:center;gap:14px}
-.nav-logo{width:38px;height:38px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.nav-left{display:flex;align-items:center;gap:14px;min-width:0}
+.nav-logo{width:38px;height:38px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .nav-logo svg{width:20px;height:20px;fill:white}
-.nav-title{color:#f8fafc;font-size:15px;font-weight:600}
+.nav-title{color:#f8fafc;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nav-sub{color:#64748b;font-size:11px;font-family:'DM Mono',monospace;margin-top:1px}
-.nav-right{display:flex;align-items:center;gap:14px}
-.nav-time{color:#cbd5e1;font-size:12px;font-family:'DM Mono',monospace;background:var(--nav2);padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.07)}
+.nav-right{display:flex;align-items:center;gap:14px;flex-shrink:0}
+.nav-time{color:#cbd5e1;font-size:12px;font-family:'DM Mono',monospace;background:var(--nav2);padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.07);white-space:nowrap}
 .nav-status{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:600;transition:all 0.6s ease;min-width:90px;justify-content:center}
 .nav-status.online{background:rgba(5,150,105,0.15);border:1px solid rgba(5,150,105,0.3);color:#34d399}
 .nav-status.offline{background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.25);color:#f87171}
@@ -50,7 +56,7 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
 .status-dot.connecting{background:#fbbf24;animation:dotBlink 0.8s infinite}
 @keyframes dotPulse{0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,0.4)}60%{box-shadow:0 0 0 5px rgba(52,211,153,0)}}
 @keyframes dotBlink{0%,100%{opacity:1}50%{opacity:0.3}}
-.nav-notif{position:relative;cursor:pointer;width:36px;height:36px;background:var(--nav2);border-radius:9px;border:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;transition:background 0.2s}
+.nav-notif{position:relative;cursor:pointer;width:36px;height:36px;background:var(--nav2);border-radius:9px;border:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;transition:background 0.2s;flex-shrink:0}
 .nav-notif:hover{background:#2d3a52}
 .nav-notif svg{width:18px;height:18px;fill:#94a3b8}
 .notif-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:#dc2626;color:white;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--nav);padding:0 3px;transition:all 0.3s}
@@ -141,6 +147,11 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
 .ai-insight-text{font-size:12px;color:var(--sub);line-height:1.7}
 .ai-insight-text strong{color:var(--text)}
 
+.ai-stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.ai-stat-card{background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:14px;text-align:center}
+.ai-stat-label{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;margin-bottom:4px}
+.ai-stat-val{font-size:22px;font-weight:700;font-family:'DM Mono',monospace}
+
 /* NOTIF PANEL */
 .notif-panel{position:fixed;top:68px;right:24px;width:300px;background:white;border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,0.12);z-index:200;transform:translateY(-8px) scale(0.97);opacity:0;pointer-events:none;transition:all 0.22s cubic-bezier(0.16,1,0.3,1)}
 .notif-panel.open{transform:translateY(0) scale(1);opacity:1;pointer-events:all}
@@ -151,6 +162,65 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
 .notif-empty{padding:20px;text-align:center;font-size:12px;color:var(--muted)}
 
 .footer{text-align:center;padding:16px;color:var(--muted);font-size:11px;font-family:'DM Mono',monospace;border-top:1px solid var(--border);margin-top:4px}
+
+/* ════════════════ RESPONSIVE ════════════════ */
+@media(max-width:1024px){
+  .charts-row{grid-template-columns:1fr 1fr}
+  .alert-card{grid-column:1/-1;max-height:200px}
+  .alert-list{max-height:140px}
+}
+@media(max-width:768px){
+  .body{padding:14px 12px}
+  .nav{padding:0 14px;height:54px}
+  .nav-sub{display:none}
+  .nav-time{display:none}
+  .nav-title{font-size:13px}
+  .nav-logo{width:34px;height:34px}
+  .meters-grid{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+  .meter-card{padding:12px 8px}
+  .meter-canvas-wrap{width:76px;height:76px}
+  .meter-val{font-size:17px}
+  .meter-label{font-size:11px}
+  .meter-sub{font-size:9px;margin-bottom:6px}
+  .meter-pill{font-size:10px;padding:3px 10px;margin-top:6px}
+  .charts-row{grid-template-columns:1fr;gap:10px;margin-bottom:14px}
+  .alert-card{max-height:none}
+  .alert-list{max-height:180px}
+  .history-row{padding:14px}
+  .history-title{font-size:12px}
+  .status-banner{padding:10px 12px}
+  .banner-time{display:none}
+  .banner-sub{font-size:10px}
+  .ai-stats-grid{grid-template-columns:1fr 1fr;gap:8px}
+  .ai-stat-val{font-size:18px}
+  .notif-panel{right:10px;width:calc(100vw - 20px)}
+}
+@media(max-width:480px){
+  .body{padding:10px}
+  .nav{padding:0 12px;height:50px}
+  .nav-title{font-size:12px}
+  .nav-logo{width:30px;height:30px}
+  .nav-logo svg{width:17px;height:17px}
+  .nav-status{padding:5px 10px;min-width:60px;font-size:11px}
+  .meters-grid{grid-template-columns:1fr 1fr;gap:8px}
+  .meter-card{padding:10px 6px}
+  .meter-canvas-wrap{width:66px;height:66px}
+  .meter-val{font-size:15px}
+  .meter-icon{width:26px;height:26px}
+  .meter-icon svg{width:14px;height:14px}
+  .chart-card{padding:12px}
+  .chart-title{font-size:11px}
+  .history-row{padding:12px}
+  .banner-left{gap:8px}
+  .banner-icon{width:30px;height:30px}
+  .banner-title{font-size:12px}
+  .ai-stats-grid{grid-template-columns:1fr 1fr;gap:8px}
+  .ai-stat-card{padding:10px}
+  .ai-stat-val{font-size:16px}
+  .ai-stat-label{font-size:10px}
+  .ai-insight{flex-direction:column;gap:8px}
+  .footer{font-size:10px;padding:12px}
+}
 </style>
 </head>
 <body>
@@ -162,7 +232,7 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
 <nav class="nav">
   <div class="nav-left">
     <div class="nav-logo">
-      <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 015 5c0 2.5-1.5 4.5-3.5 5.5V17h-3v-4.5C8.5 11.5 7 9.5 7 7a5 5 0 015-5zm-1.5 17h3v1.5a1.5 1.5 0 01-3 0V19z"/></svg>
+      <svg viewBox="0 0 24 24" fill="white"><path d="M18.06 22.99h1.66c.84 0 1.53-.64 1.63-1.46L23 5.05h-5V1h-1.97v4.05h-4.97l.3 2.34c1.71.47 3.31 1.32 4.27 2.26 1.44 1.42 2.43 2.89 2.43 5.29v8.05zM1 21.99V21h15.03v.99c0 .55-.45 1-1.01 1H2.01c-.56 0-1.01-.45-1.01-1zm15.03-7c0-4.5-6.72-5-8.76-5-2.04 0-6.27.5-6.27 5h15.03zM1 17h15v2H1z"/></svg>
     </div>
     <div>
       <div class="nav-title">Smart Kitchen Safety Monitor</div>
@@ -316,22 +386,22 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min
     </div>
 
     <!-- Stat Cards -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
-      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:14px;text-align:center">
-        <div style="font-size:11px;color:var(--sub);font-family:'DM Mono',monospace">Total Records</div>
-        <div id="aiTotalRec" style="font-size:22px;font-weight:700;color:var(--blue);font-family:'DM Mono',monospace;margin:4px 0">--</div>
+    <div class="ai-stats-grid">
+      <div class="ai-stat-card">
+        <div class="ai-stat-label">Total Records</div>
+        <div class="ai-stat-val" id="aiTotalRec" style="color:var(--blue)">--</div>
       </div>
-      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:14px;text-align:center">
-        <div style="font-size:11px;color:var(--sub);font-family:'DM Mono',monospace">Anomalies</div>
-        <div id="aiAnomCount" style="font-size:22px;font-weight:700;color:#dc2626;font-family:'DM Mono',monospace;margin:4px 0">--</div>
+      <div class="ai-stat-card">
+        <div class="ai-stat-label">Anomalies</div>
+        <div class="ai-stat-val" id="aiAnomCount" style="color:#dc2626">--</div>
       </div>
-      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:14px;text-align:center">
-        <div style="font-size:11px;color:var(--sub);font-family:'DM Mono',monospace">Alert Rate</div>
-        <div id="aiAlertRate" style="font-size:22px;font-weight:700;color:#d97706;font-family:'DM Mono',monospace;margin:4px 0">--%</div>
+      <div class="ai-stat-card">
+        <div class="ai-stat-label">Alert Rate</div>
+        <div class="ai-stat-val" id="aiAlertRate" style="color:#d97706">--%</div>
       </div>
-      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:14px;text-align:center">
-        <div style="font-size:11px;color:var(--sub);font-family:'DM Mono',monospace">Peak Risk Hour</div>
-        <div id="aiPeakHour" style="font-size:22px;font-weight:700;color:#7c3aed;font-family:'DM Mono',monospace;margin:4px 0">--:00</div>
+      <div class="ai-stat-card">
+        <div class="ai-stat-label">Peak Risk Hour</div>
+        <div class="ai-stat-val" id="aiPeakHour" style="color:#7c3aed">--:00</div>
       </div>
     </div>
 
